@@ -100,9 +100,9 @@ void init_ptt(void) {
 #define HAVE_EVDEV
 #endif
 
-static bool ppt_keyboard_handle_unknown = false;
 
-static bool ppt_keyboard_handle(void) {
+static bool _evdev_ppt(void)
+{
 #ifdef HAVE_EVDEV
     int ptt_key = KEY_LEFTCTRL; // TODO allow user to change this...
     if (ptt_keyboard_handle) {
@@ -116,27 +116,18 @@ static bool ppt_keyboard_handle(void) {
 
         if (keyb & mask) {
             LOG_TRACE("XLIB", "PTT key is down" );
-            return true;
+            return 0;
         } else {
             LOG_TRACE("XLIB", "PTT key is up" );
-            ppt_keyboard_handle_unknown = false;
-            return false;
+            return 1;
         }
     }
 #endif
-
-    ppt_keyboard_handle_unknown = true;
-    return false;
+    return -1;
 }
 
-static bool check_ptt(void) {
-    /* First, we try for direct access to the keyboard. */
-    if (ppt_keyboard_handle()) {
-        return true;
-    } else if (!ppt_keyboard_handle_unknown) {
-        return false;
-    }
-
+static bool _x11_ptt_key_down(void)
+{
     /* Okay nope, lets' fallback to xinput... *pouts*
      * Fall back to Querying the X for the current keymap. */
     int ptt_key   = XKeysymToKeycode(display, XK_Control_L); // TODO allow user to change this...
@@ -158,13 +149,21 @@ static bool check_ptt(void) {
     return false;
 }
 
-bool check_ptt_key(void) {
+
+
+bool check_ptt_key(void)
+{
     if (!settings.push_to_talk) {
         // LOG_TRACE("XLIB", "PTT is disabled" );
         return true; /* If push to talk is disabled, return true. */
     }
 
-    return check_ptt();
+    int edev = _evdev_ppt();
+    if (edev < 0) {
+        return _x11_ptt_key_down();
+    }
+
+    return !edev;
 }
 
 void exit_ptt(void) {
